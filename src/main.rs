@@ -1,51 +1,54 @@
 #![feature(proc_macro_hygiene, decl_macro)]
-
-#[macro_use]
 extern crate diesel;
 
-use chrono::prelude::*;
-use diesel::prelude::*;
-use diesel::dsl::now;
-use diesel::sql_types::Timestamp;
-
-mod database;
 mod schema;
+mod database;
 
 use crate::database::establish_connection;
+use diesel::prelude::*;
+use diesel::sql_query;
 
-// Import the table and schema macros.
-use crate::schema::{item_types, items};
 
-#[derive(Insertable)]
-#[table_name = "item_types"]
-struct NewItemType<'a> {
-    name: &'a str,
+#[derive(Debug, QueryableByName)]
+#[diesel(table_name = schema::item_types)]
+struct ItemType {
+    id: i32,
+    name: String,
 }
 
-#[derive(Insertable)]
-#[table_name = "items"]
-struct NewItem<'a> {
-    item_name: &'a str,
+#[derive(Debug, QueryableByName)]
+#[diesel(table_name = schema::items)]
+struct Item {
+    id: i32,
+    item_name: String,
+    acquired_time: chrono::NaiveDateTime,
+    // Assuming you use chrono for datetime fields
     item_type_id: i32,
-    acquired_time: NaiveDateTime,
 }
+
 
 fn main() {
     let mut connection = establish_connection();
-    let new_item = NewItem {
-        item_name: "Book",
-        item_type_id: 1,
-        acquired_time: Utc::now().naive_utc(),
-    };
 
-    diesel::insert_into(items::table)
-        .values(&new_item)
-        .execute(&mut connection)
-        .expect("Error saving new item");
+    let item_type_id_to_retrieve = 1;
 
-    let new_item_type = NewItemType { name: "Education" };
-    diesel::insert_into(item_types::table)
-        .values(&new_item_type)
-        .execute(&mut connection)
-        .expect("Error saving new item type");
+    // Using raw SQL to retrieve the ItemType
+    let item_type: ItemType = sql_query("SELECT * FROM item_types WHERE id = $1")
+        .bind::<diesel::sql_types::Integer, _>(item_type_id_to_retrieve)
+        .get_result(&mut connection)
+        .expect("Failed to find item type by ID");
+
+    // Using raw SQL to retrieve items of the specified item type
+    let items_of_type: Vec<Item> = sql_query("SELECT * FROM items WHERE item_type_id = $1")
+        .bind::<diesel::sql_types::Integer, _>(item_type.id)
+        .load(&mut connection)
+        .expect("Failed to load items of item type");
+
+    println!("Items of type '{}':", item_type.name);
+    for item in items_of_type {
+        println!(
+            "Item ID: {}, Name: {}, Acquired Time: {:?}",
+            item.id, item.item_name, item.acquired_time
+        );
+    }
 }
