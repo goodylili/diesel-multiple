@@ -22,7 +22,6 @@ struct Item {
     id: i32,
     item_name: String,
     acquired_time: chrono::NaiveDateTime,
-    // Assuming you use chrono for datetime fields
     item_type_id: i32,
 }
 
